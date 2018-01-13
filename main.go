@@ -95,7 +95,7 @@ func rootCmdRun(cmd *cobra.Command, args []string) {
 		Log.Infof("test '%s', role '%s'", test, role)
 		m.Call([]reflect.Value{})
 	} else {
-		Log.Infof("test %s of %s not defined", test, role)
+		Log.Infof("%s of %s not defined", test, role)
 	}
 }
 

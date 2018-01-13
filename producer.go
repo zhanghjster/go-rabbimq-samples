@@ -3,10 +3,46 @@ package main
 import (
 	"strconv"
 
+	"fmt"
+
 	"github.com/streadway/amqp"
 )
 
 type Producer struct{}
+
+// 消息会发送给每一个绑定到fanout类型的exchange的queue
+// publish时的routing key会被忽略，经典的广播模式
+//
+// $go run *.go -r producer -t FanOutExchange  \
+//  --message-body "hello world" \
+//  --message-count 6 \
+// 	--exchange fanoutSample
+func (p *Producer) FanOutExchange() {
+	// 定义一个fanout类型的exchange
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"fanout",
+		false, false, false, false,
+		nil,
+	)
+	FatalErr(err)
+
+	for i := 1; i < Message.Count; i++ {
+		msg := fmt.Sprintf("%d %s", i, Message.Body)
+		err := AmqpChan.Publish(
+			ExchangeName,
+			"", // fanout类型的exchange忽略routing key
+			false, false,
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(msg),
+			},
+		)
+		FatalErr(err)
+
+		Log.Infof("send message '%s'", msg)
+	}
+}
 
 // 测试Default exchange
 //

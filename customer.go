@@ -1,21 +1,74 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"sync"
 
 	"math/rand"
 
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 type Customer struct{}
 
-// 测试Default exchange
+// 消息会发送给每一个绑定到fanout类型的exchange的queue
+// publish时的routing key会被忽略，经典的广播模式
 //
+// go run *.go -r customer -t FanOutExchange  \
+// 	--customer-count 3 \
+// 	--exchange fanoutSample
+func (c *Customer) FanOutExchange() {
+	// 定义一个fanout类型的exchange
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"fanout",
+		false, false, false, false,
+		nil,
+	)
+	FatalErr(err)
+
+	// 每个customer一个queue
+	for i := 1; i <= CustomerCount; i++ {
+		q, err := AmqpChan.QueueDeclare(
+			"", // 系统默认创建一个
+			false, false, false, false,
+			nil,
+		)
+		FatalErr(err)
+
+		// 绑定到fanoutSample这个Exchange
+		err = AmqpChan.QueueBind(
+			q.Name,
+			"", // fanout类型exchange忽略binding key
+			ExchangeName,
+			false,
+			nil,
+		)
+		FatalErr(err)
+
+		delivery, err := AmqpChan.Consume(
+			q.Name,
+			"customer."+strconv.Itoa(i),
+			true, // autoAck
+			false,
+			false,
+			false,
+			nil,
+		)
+		go func(i int) {
+			Log.Infof("customer %d start consume queue %s", i, q.Name)
+			for {
+				msg, _ := <-delivery
+				Log.Infof("customer %d get message '%s'", i, string(msg.Body))
+			}
+		}(i)
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	wg.Wait()
+}
+
 // 新的Queue会自动的以它的name为binding key
 // 绑定到default exchange
 //
@@ -23,7 +76,7 @@ type Customer struct{}
 // 用queue的名称作为routing key则发送到指定名称的队列
 //
 // go run *.go -r customer -t DefaultExchange  -q hello
-func (c *Customer) DefaultExchange() error {
+func (c *Customer) DefaultExchange() {
 	// 创建一个queue
 	q, err := AmqpChan.QueueDeclare(
 		QueueName,
@@ -47,8 +100,6 @@ func (c *Customer) DefaultExchange() error {
 		msg, _ := <-delivery
 		Log.Infof("get msg '%s'", string(msg.Body))
 	}
-
-	return nil
 }
 
 // 多个消费者竞争消费同一个queue
@@ -74,41 +125,35 @@ func (c *Customer) CompetingCustomer() {
 	)
 	FatalErr(err)
 
-	for i := 1; i <= CustomerCount; i++ {
-		// 打开一个channel代表一个customer
-		// 在rabbitmq的channels里可以看到多个channel
-		ch, err := AmqpConn.Channel()
-		FatalErr(err)
+	if CustomerDisparities {
+		AmqpChan.Qos(
+			1, // 设置可以预抓取的message个数
+			0,
+			false,
+		)
+	}
 
+	// 如果消费者效率差别很大，关闭autoAck打开prefetch
+	var autoAck = !CustomerDisparities
+
+	for i := 1; i <= CustomerCount; i++ {
 		// 模拟customer消费一个message的时间差别很大
 		// 打开prefetch, customer那里还需要关闭autoAck
-		if CustomerDisparities {
-			ch.Qos(
-				1, // 设置可以预抓取的message个数
-				0,
-				false,
-			)
-		}
 
-		// 如果消费者效率差别很大，关闭autoAck打开prefetch
-		var autoAck = !CustomerDisparities
-
-		// 消费上面创建的queue
-		delivery, err := ch.Consume(
+		// 一个新的customer开始消费上面创建的queue
+		delivery, err := AmqpChan.Consume(
 			q.Name,
 			"customer"+strconv.Itoa(i),
 			autoAck, // 自动ack，消息被customer取出后会被broker删除
 			false, false, false,
 			nil,
 		)
+		FatalErr(err)
 
 		go func(i int) {
 			Log.Infof("customer %d start consume queue %s, same effectiveness %v", i, q.Name, !CustomerDisparities)
 			for {
-				msg, ok := <-delivery
-				if !ok {
-					FatalErr(errors.New(fmt.Sprintf("customer %d can read delivery fail", i)))
-				}
+				msg, _ := <-delivery
 
 				Log.Infof("customer %d, get message %s", i, string(msg.Body))
 
@@ -130,4 +175,5 @@ func (c *Customer) CompetingCustomer() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	wg.Wait()
+
 }
