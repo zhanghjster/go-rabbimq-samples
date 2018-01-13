@@ -16,7 +16,7 @@ type Producer struct{}
 // producer在publish message时不指定exchanger，
 // 用queue的名称作为routing key则发送到指定名称的队列
 //
-// $go run *.go -r producer -t DefaultExchange \
+// go run *.go -r producer -t DefaultExchange \
 // 	--message-body "hello world" \
 //  -q hello
 func (p *Producer) DefaultExchange() error {
@@ -47,9 +47,8 @@ func (p *Producer) DefaultExchange() error {
 // 向指定名称queue发送多个消息供多个consumer消费
 // 1. 对于每个customer消费任务时间均等的情况下，
 //    采用自动ack，message会均分到每个customer
-//    go run *.go -r producer -t CompetingCustomer \
-//      --message-body "hello world" --message-count 6 \
-//      -q hello
+//    go run *.go -r customer -t CompetingCustomer  -q hello \
+//     --customer-count 3 --customer-disparities
 // 2. 对于customer消费一个任务的时间不均等情况下，
 //    采用prefetch+手动ack，让运行的快的consumer消费更多，避免等待
 //    go run *.go -r producer -t CompetingCustomer \
