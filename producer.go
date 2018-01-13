@@ -5,6 +5,8 @@ import (
 
 	"fmt"
 
+	"math/rand"
+
 	"github.com/streadway/amqp"
 )
 
@@ -32,6 +34,59 @@ func (p *Producer) FanOutExchange() {
 		err := AmqpChan.Publish(
 			ExchangeName,
 			"", // fanout类型的exchange忽略routing key
+			false, false,
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(msg),
+			},
+		)
+		FatalErr(err)
+
+		Log.Infof("send message '%s'", msg)
+	}
+}
+
+// Direct 类型的Exchange根据routing key来发送消息给queue, 属于单播模式
+// 消息发送给binding key和消息的routing key相同的queue
+// 通常用于指定message的接收者的情景, queue通过binding key来限制它感兴趣的消息。
+//
+// 代码模拟的是广播日志，
+// 一个queue只接收的是Warning类型的日志，
+// 另一个queue接收'Error'和'Fatal'类型的日志
+//
+// $ go run *.go -r producer -t DirectExchange \
+// 	--message-body "log here..." \
+// 	--message-count 10 \
+// 	--exchange directExchangeSample
+func (p *Producer) DirectExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"direct",
+		false, false, false, false,
+		nil,
+	)
+	FatalErr(err)
+
+	var levels = []string{"warning", "error", "fatal"}
+	// 定义关注warning的queue
+	q, err := AmqpChan.QueueDeclare("", false, false, false, false, nil)
+	FatalErr(err)
+	err = AmqpChan.QueueBind(q.Name, levels[0], ExchangeName, false, nil)
+	FatalErr(err)
+
+	// 定义关注error和fatal的queue
+	q, err = AmqpChan.QueueDeclare("", false, false, false, false, nil)
+	FatalErr(err)
+	for _, l := range levels[1:] {
+		err = AmqpChan.QueueBind(q.Name, l, ExchangeName, false, nil)
+	}
+
+	for i := 0; i < Message.Count; i++ {
+		level := levels[rand.Intn(len(levels))]
+		msg := fmt.Sprintf("[%s]%s", level, Message.Body)
+		err := AmqpChan.Publish(
+			ExchangeName,
+			level,
 			false, false,
 			amqp.Publishing{
 				ContentType: "text/plain",

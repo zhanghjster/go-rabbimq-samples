@@ -2,11 +2,12 @@ package main
 
 import (
 	"strconv"
-	"sync"
 
 	"math/rand"
 
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 type Customer struct{}
@@ -64,9 +65,54 @@ func (c *Customer) FanOutExchange() {
 		}(i)
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	wg.Wait()
+	WaitForTERM()
+}
+
+// Direct 类型的Exchange根据routing key来发送消息给queue, 属于单播模式
+// 消息发送给binding key和消息的routing key相同的queue
+// 通常用于指定message的接收者的情景, queue通过binding key来限制它感兴趣的消息。
+//
+// 代码模拟的是广播日志，
+// 一个queue只接收的是Warning类型的日志，
+// 另一个queue接收'Error'和'Fatal'类型的日志
+//
+// $ go run *.go -r customer -t DirectExchange \
+// 	--exchange directExchangeSample
+func (c *Customer) DirectExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"direct",
+		false, false, false, false,
+		nil,
+	)
+	FatalErr(err)
+
+	var levels = []string{"warning", "error", "fatal"}
+	// 定义关注warning的queue
+	q, err := AmqpChan.QueueDeclare("", false, false, false, false, nil)
+	FatalErr(err)
+	err = AmqpChan.QueueBind(q.Name, levels[0], ExchangeName, false, nil)
+	FatalErr(err)
+
+	delivery, err := AmqpChan.Consume(
+		q.Name, "", false, false, false, false, nil,
+	)
+	FatalErr(err)
+	go c.dumpMessage("queue for warning", delivery)
+
+	// 定义关注error和fatal的queue
+	q, err = AmqpChan.QueueDeclare("", false, false, false, false, nil)
+	FatalErr(err)
+	for _, l := range levels[1:] {
+		err = AmqpChan.QueueBind(q.Name, l, ExchangeName, false, nil)
+	}
+	delivery, err = AmqpChan.Consume(
+		q.Name, "", false, false, false, false, nil,
+	)
+	FatalErr(err)
+	go c.dumpMessage("queue for error and fatal", delivery)
+
+	WaitForTERM()
 }
 
 // 新的Queue会自动的以它的name为binding key
@@ -96,10 +142,7 @@ func (c *Customer) DefaultExchange() {
 	)
 	FatalErr(err)
 
-	for {
-		msg, _ := <-delivery
-		Log.Infof("get msg '%s'", string(msg.Body))
-	}
+	c.dumpMessage(q.Name, delivery)
 }
 
 // 多个消费者竞争消费同一个queue
@@ -172,8 +215,12 @@ func (c *Customer) CompetingCustomer() {
 		}(i)
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	wg.Wait()
+	WaitForTERM()
+}
 
+func (c *Customer) dumpMessage(preFix string, d <-chan amqp.Delivery) {
+	for {
+		msg, _ := <-d
+		Log.Infof("%s get message '%s'", preFix, string(msg.Body))
+	}
 }

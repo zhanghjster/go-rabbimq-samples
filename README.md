@@ -17,7 +17,7 @@ RabbitMQ的Golang实例代码
 
 #### FanOutExchange
 
-测试fanout类型的exchange。fanout类型的exchange会将消息发送给所有绑定到它的queue，经典的广播模式
+Fanout类型的exchange会将消息发送给所有绑定到它的queue，经典的广播模式。代码模拟的是publisher广播消息给所有的customer。
 
 1. 运行producer
 
@@ -36,11 +36,39 @@ RabbitMQ的Golang实例代码
    	--exchange fanoutSample
    ~~~
 
+
+
+#### DirectExchange
+
+Direct 类型的Exchange根据routing key来发送消息给queue, 属于单播模式，工作原理如下：
+
+一个queue使用 binding key **K** 绑定到Exchange，当一个消息使用 **R** 为routing key时，exchange会将其发送给 **k=R**的queue
+
+这种类型的Exchange通常用于指定message的接收者的情景，实现过滤的概念，queue通过binding key来限制它感兴趣的消息。
+
+代码模拟的是广播日志，一个queue只接收的是Warning类型的日志，另一个queue接收'Error'和'Fatal'类型的日志
+
+1. 运行producer
+
+   ~~~shell
+   go run *.go -r producer -t DirectExchange \
+   	--message-body "log here..." \
+   	--message-count 10 \
+   	--exchange directExchangeSample
+   ~~~
+
    ​
+
+2. 运行customer
+
+   ~~~shell
+   go run *.go -r customer -t DirectExchange \
+   --exchange directExchangeSample
+   ~~~
 
 #### DefaultExchange
 
-测试default exchange。每一个queue都会自动的绑定到default exchange，binding key 用的是queue的name。publisher通过直接使用queue的name作为routing key并且忽略exchange 名称实现将消息直接发送给指定名称的queue。
+每一个queue都会自动的绑定到default exchange，binding key 用的是queue的name。代码模拟的是publisher通过直接使用queue的name作为routing key将消息直接发送给指定名称的queue。
 
 运行方式：
 
@@ -60,7 +88,7 @@ RabbitMQ的Golang实例代码
 
 #### CompetingCustomer
 
-测试多个customer竞争消费一个queue的情况，涉及customer处理message时间均等与悬殊的处理方式
+代码模拟的是多个customer竞争消费一个queue的情况，涉及customer处理message时间均等与悬殊的处理方式
 
 1. 模拟customer具有相同效率，均等的消费消息，autoAck为true, 运行方式:
 
@@ -68,18 +96,18 @@ RabbitMQ的Golang实例代码
 
      ~~~shell
      go run *.go -r producer -t CompetingCustomer \
-           --message-body "hello world" --message-count 6 \
+           --message-body "hello world" \
+           --message-count 6 \
            -q hello
      ~~~
 
    * customer
 
      ~~~shell
-     go run *.go -r customer -t CompetingCustomer  -q hello \
-            --customer-count 3
+     go run *.go -r customer -t CompetingCustomer \
+            --customer-count 3 \
+            -q hello
      ~~~
-
-   从日志可以看到，采用autoAck，message会被均分到每个customer
 
 
 2. 模拟customer效率差别很大的情况，打开prefetch，关闭ack，运行方式:
@@ -88,7 +116,8 @@ RabbitMQ的Golang实例代码
 
      ~~~shell
      go run *.go -r producer -t CompetingCustomer \
-           --message-body "hello world" --message-count 6 \
+           --message-body "hello world" \
+           --message-count 6 \
            -q hello
      ~~~
 
@@ -97,11 +126,11 @@ RabbitMQ的Golang实例代码
    * customer
 
      ~~~shell
-     go run *.go -r customer -t CompetingCustomer  -q hello \
-          --customer-count 3 --customer-disparities
+     go run *.go -r customer -t CompetingCustomer \
+          --customer-count 3 \
+          --customer-disparities \
+          -q hello
      ~~~
 
-   日志显示，消费的比较快的customer会消费更多的message，而不是均分
-
-
+   ​
 
