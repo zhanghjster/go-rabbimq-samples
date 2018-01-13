@@ -4,7 +4,7 @@ RabbitMQ的Golang实例代码
 
 ### 环境搭建
 
-环境为mac，执行 docker-compose -f docker-compose.yml up -d 启动rabbitmq，浏览器中打开http://localhost:15672进入rabbitmq的管理界面，账号密码默认为 guest:guest
+环境为mac，执行 docker-compose -f docker-compose.yml up -d 启动rabbitmq，浏览器中打开http://localhost:15672 进入rabbitmq的管理界面，账号密码默认为 guest:guest
 
 ### 代码结构
 
