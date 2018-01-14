@@ -86,7 +86,7 @@ Direct 类型的Exchange根据routing key来发送消息给queue, 属于单播�
    go run *.go -r customer -t DefaultExchange  -q hello
    ```
 
-#### Topic Exchange
+#### TopicExchange
 
 Topic exchange 与 Direct exchange的使用方法类似，不同之处是它是根据routing key与binding key的做类似正则匹配来进行路由，而不是像direct change那样需要完全相等。比如, queue的binding key是 "#.error.#"会接收所有routing key中带有 ".error."的消息
 
@@ -109,7 +109,7 @@ Topic exchange 与 Direct exchange的使用方法类似，不同之处是它是�
    go run *.go -r customer -t TopicExchange --exchange topicExchangeSample
    ~~~
 
-#### Header Exchange
+#### HeaderExchange
 
 Header exchange 用于根据message的header而不是routing key来决定路由，支持对多个属性的匹配。如果一个message header里的某一个值与队列 binding key想匹配，则认为可以路由给这个队列。
 
