@@ -86,6 +86,29 @@ Direct 类型的Exchange根据routing key来发送消息给queue, 属于单播�
    go run *.go -r customer -t DefaultExchange  -q hello
    ```
 
+#### Topic Exchange
+
+Topic exchange 与 Topic exchange的原理类似，不同之处是它是根据routing key与binding key的做类似正则匹配来进行路由，而不是完全相等。比如, queue的binding key是 "#.error.#"会接收所有routing key中带有 ".error."的消息
+
+实例模拟的是两个队列，一个关心所有app的error日志，另一个队列关心的是“chat"这个app的所有日志，消息的routing key的命名规则为"<app_name>.<error_level>".  第一个queue使用 "#.error"作为binding key，第二个queue用"chat.#"作为binding key
+
+运行方式：
+
+1. producer
+
+   ~~~shell
+   go run *.go -r producer -t TopicExchange \
+    	--message-body "log here..." \
+    	--message-count 10 \
+    	--exchange topicExchangeSample
+   ~~~
+
+2. customer
+
+   ~~~shell
+   go run *.go -r customer -t TopicExchange --exchange topicExchangeSample
+   ~~~
+
 #### CompetingCustomer
 
 代码模拟的是多个customer竞争消费一个queue的情况，涉及customer处理message时间均等与悬殊的处理方式

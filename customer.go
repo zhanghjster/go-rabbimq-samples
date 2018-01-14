@@ -145,6 +145,42 @@ func (c *Customer) DefaultExchange() {
 	c.dumpMessage(q.Name, delivery)
 }
 
+// 模拟的是两个队列，一个关心所有app的error日志，另一个队列关心的是“chat"这个app的所有日志
+// 消息的routing key的命名规则为"<app_name>.<error_level>"
+//
+// $ go run *.go -r customer -t TopicExchange \
+// 	--exchange topicExchangeSample
+func (c *Customer) TopicExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"topic",
+		false,
+		true, // auto delete
+		false,
+		false,
+		nil,
+	)
+	FatalErr(err)
+
+	for _, key := range []string{"chat.#", "#.error"} {
+		q, err := AmqpChan.QueueDeclare(
+			QueueName,
+			false,
+			true, // queue使用完后自动删除
+			false,
+			false,
+			nil,
+		)
+		FatalErr(err)
+
+		AmqpChan.QueueBind(q.Name, key, ExchangeName, false, nil)
+		delivery, _ := AmqpChan.Consume(q.Name, "", true, false, false, false, nil)
+		go c.dumpMessage("["+key+"]", delivery)
+	}
+
+	WaitForTERM()
+}
+
 // 多个消费者竞争消费同一个queue
 //
 // 1. 对于customer消费每一个message时间均等,
@@ -156,7 +192,6 @@ func (c *Customer) DefaultExchange() {
 //    使用prefetch + 手动ack，消息会自动的被消费的比较快的customer消费
 //    go run *.go -r customer -t CompetingCustomer  -q hello \
 //     --customer-count 3 --customer-disparities
-
 func (c *Customer) CompetingCustomer() {
 	// 创建queue
 	// 不对queue进行和exchange绑定设置

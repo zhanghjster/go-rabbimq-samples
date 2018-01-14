@@ -135,6 +135,55 @@ func (p *Producer) DefaultExchange() error {
 	return nil
 }
 
+// 模拟的是两个队列，一个关心所有app的error日志，另一个队列关心的是“chat"这个app的所有日志
+// 消息的routing key的命名规则为"<app_name>.<error_level>"
+//
+// go run *.go -r producer -t TopicExchange \
+// 	--message-body "log here..." \
+// 	--message-count 10 \
+// 	--exchange topicExchangeSample
+func (p *Producer) TopicExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"topic",
+		false,
+		true, // auto delete
+		false,
+		false,
+		nil,
+	)
+	FatalErr(err)
+
+	var levels = []string{"warning", "error", "fatal"}
+	var apps = []string{"chat", "live", "image"}
+	for _, key := range []string{"chat.#", "#.error"} {
+		q, err := AmqpChan.QueueDeclare(QueueName, false, true, false, false, nil)
+		FatalErr(err)
+
+		err = AmqpChan.QueueBind(q.Name, key, ExchangeName, false, nil)
+		FatalErr(err)
+	}
+
+	for i := 1; i < Message.Count; i++ {
+		var key = fmt.Sprintf(
+			"%s.%s", apps[rand.Intn(len(apps))], levels[rand.Intn(len(levels))],
+		)
+
+		AmqpChan.Publish(
+			ExchangeName,
+			key,
+			false, false,
+			amqp.Publishing{
+				ContentType: "plain/text",
+				Body:        []byte(key + " " + Message.Body),
+			},
+		)
+
+		Log.Infof("send %s, message '%s'", key, Message.Body)
+	}
+
+}
+
 // 向指定名称queue发送多个消息供多个consumer消费
 // 1. 对于每个customer消费任务时间均等的情况下，
 //    采用自动ack，message会均分到每个customer
