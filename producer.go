@@ -1,9 +1,8 @@
 package main
 
 import (
-	"strconv"
-
 	"fmt"
+	"strconv"
 
 	"math/rand"
 
@@ -68,19 +67,6 @@ func (p *Producer) DirectExchange() {
 	FatalErr(err)
 
 	var levels = []string{"warning", "error", "fatal"}
-	// 定义关注warning的queue
-	q, err := AmqpChan.QueueDeclare("", false, false, false, false, nil)
-	FatalErr(err)
-	err = AmqpChan.QueueBind(q.Name, levels[0], ExchangeName, false, nil)
-	FatalErr(err)
-
-	// 定义关注error和fatal的queue
-	q, err = AmqpChan.QueueDeclare("", false, false, false, false, nil)
-	FatalErr(err)
-	for _, l := range levels[1:] {
-		err = AmqpChan.QueueBind(q.Name, l, ExchangeName, false, nil)
-	}
-
 	for i := 0; i < Message.Count; i++ {
 		level := levels[rand.Intn(len(levels))]
 		msg := fmt.Sprintf("[%s]%s", level, Message.Body)
@@ -156,14 +142,6 @@ func (p *Producer) TopicExchange() {
 
 	var levels = []string{"warning", "error", "fatal"}
 	var apps = []string{"chat", "live", "image"}
-	for _, key := range []string{"chat.#", "#.error"} {
-		q, err := AmqpChan.QueueDeclare(QueueName, false, true, false, false, nil)
-		FatalErr(err)
-
-		err = AmqpChan.QueueBind(q.Name, key, ExchangeName, false, nil)
-		FatalErr(err)
-	}
-
 	for i := 1; i < Message.Count; i++ {
 		var key = fmt.Sprintf(
 			"%s.%s", apps[rand.Intn(len(apps))], levels[rand.Intn(len(levels))],
@@ -182,6 +160,46 @@ func (p *Producer) TopicExchange() {
 		Log.Infof("send %s, message '%s'", key, Message.Body)
 	}
 
+}
+
+// 根据header来做更复杂的路由规则
+// go run *.go -r customer -t HeaderExchange --exchange headerExchangeSample
+func (p *Producer) HeaderExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"headers", // headers 类型
+		false,
+		true, // auto delete
+		false,
+		false,
+		nil,
+	)
+	FatalErr(err)
+
+	var apps = []string{"chat", "live", "image"}
+	var levels = []string{"warning", "error", "fatal"}
+	var versions = []string{"v1.0", "v2.0", "latest"}
+
+	var header = make(amqp.Table)
+	for i := 0; i < Message.Count; i++ {
+		header["app"] = apps[rand.Intn(len(apps))]
+		header["version"] = versions[rand.Intn(len(versions))]
+		header["level"] = levels[rand.Intn(len(levels))]
+
+		AmqpChan.Publish(
+			ExchangeName,
+			"",
+			false, false,
+			amqp.Publishing{
+				DeliveryMode: amqp.Persistent,
+				Headers:      header,
+				ContentType:  "plain/text",
+				Body:         []byte(Message.Body),
+			},
+		)
+
+		Log.Infof("send message %s with header %v", Message.Body, header)
+	}
 }
 
 // 向指定名称queue发送多个消息供多个consumer消费

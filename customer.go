@@ -181,6 +181,54 @@ func (c *Customer) TopicExchange() {
 	WaitForTERM()
 }
 
+// 根据header做更复杂的过滤规则
+// $go run *.go -r producer -t HeaderExchange \
+// 	--message-body "log here..." \
+// 	--message-count 10 \
+// 	--exchange headerExchangeSample
+
+func (c *Customer) HeaderExchange() {
+	err := AmqpChan.ExchangeDeclare(
+		ExchangeName,
+		"headers", // headers 类型
+		false,
+		true, // auto delete
+		false,
+		false,
+		nil,
+	)
+	FatalErr(err)
+
+	var args = []amqp.Table{
+		{
+			"app": "chat", "version": "latest", "x-match": "any",
+		},
+		{
+			"app": "live", "version": "2.0", "x-match": "all",
+		},
+	}
+	for _, arg := range args {
+		q, err := AmqpChan.QueueDeclare(
+			"", false, true, false, false, nil,
+		)
+		FatalErr(err)
+		AmqpChan.QueueBind(q.Name, "", ExchangeName, false, arg)
+		delivery, _ := AmqpChan.Consume(
+			q.Name, "", true, false, false, false, nil,
+		)
+
+		go func(ag amqp.Table) {
+			for {
+				msg, _ := <-delivery
+				Log.Infof("[%v] get message '%s' with header %v",
+					ag, string(msg.Body), msg.Headers)
+			}
+		}(arg)
+	}
+
+	WaitForTERM()
+}
+
 // 多个消费者竞争消费同一个queue
 //
 // 1. 对于customer消费每一个message时间均等,

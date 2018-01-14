@@ -109,6 +109,36 @@ Topic exchange 与 Direct exchange的使用方法类似，不同之处是它是�
    go run *.go -r customer -t TopicExchange --exchange topicExchangeSample
    ~~~
 
+#### Header Exchange
+
+Header exchange 用于根据message的header而不是routing key来决定路由，支持对多个属性的匹配。如果一个message header里的某一个值与队列 binding key想匹配，则认为可以路由给这个队列。
+
+在binding key里设置要绑定匹配的header属性，可以设置为多个并通过‘x-match’ 控制需为‘any’多个属性匹配的原则。 如果为'all', 则需要每个指定的属性都要匹配，为'any'则任一匹配即可，比如：
+
+binding key为 'app=chat,version=latest,x-match=any', 表示需要来自app是chat或所有version是latest的消息
+
+binding key为'app=live,version=2.0,x-match=all',表示只需要来自app是chat，版本是2.0，日志的级别是error的消息
+
+代码模拟的就是一个队列绑定了chat和image两个app的所有消息，一个队列绑定的的是来自chat这个app，版本是latest的error消息
+
+运行方式：
+
+1. producer
+
+   ~~~shell
+   go run *.go -r producer -t HeaderExchange \
+   	--message-body "log here..." \
+   	--message-count 10 \
+   	--exchange headerExchangeSample
+   ~~~
+
+2. customer
+
+   ~~~shell
+   go run *.go -r customer -t HeaderExchange \
+   	--exchange headerExchangeSample
+   ~~~
+
 #### CompetingCustomer
 
 代码模拟的是多个customer竞争消费一个queue的情况，涉及customer处理message时间均等与悬殊的处理方式
